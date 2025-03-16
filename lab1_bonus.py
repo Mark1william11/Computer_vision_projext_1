@@ -14,28 +14,23 @@ def calculate_energy(image):
     gray = 0.2989 * image[:, :, 0] + 0.5870 * image[:, :, 1] + 0.1140 * image[:, :, 2]
     
     # Compute gradients using finite differences
-    gradient_x = np.abs(gray[:, 1:] - gray[:, :-1]) 
+    gradient_x = np.abs(gray[:, 1:] - gray[:, :-1])  
     gradient_y = np.abs(gray[1:, :] - gray[:-1, :]) 
     
     # Pad gradients to match the original image size
     rows, cols = gray.shape
     padded_gradient_x = np.zeros((rows, cols), dtype=np.float64)
     padded_gradient_y = np.zeros((rows, cols), dtype=np.float64)
-    
-    # Pad gradient_x (right column remains 0)
-    padded_gradient_x[:, :-1] = gradient_x
-    
-    # Pad gradient_y (bottom row remains 0)
-    padded_gradient_y[:-1, :] = gradient_y
-    
-    # Total energy
+    padded_gradient_x[:, :-1] = gradient_x 
+    padded_gradient_y[:-1, :] = gradient_y 
     energy = padded_gradient_x + padded_gradient_y
     return energy
 
 @njit(parallel=True)
 def find_seam(energy):
+    # Find the seam with the least energy (optimized with numba).
     rows, cols = energy.shape
-    dp = energy.copy()
+    dp = energy.astype(np.float64) 
 
     # Fill the DP table
     for i in range(1, rows):
@@ -75,32 +70,47 @@ def visualize_seams(image, seams):
     # Visualize the seams on the original image.
     for seam in seams:
         for i, j in seam:
-            image[i, j] = [0, 0, 255]  # Mark seam in red
+            if 0 <= i < image.shape[0] and 0 <= j < image.shape[1]:
+                image[i, j] = [0, 0, 255] 
     return image
 
-def seam_carving(image, new_width):
-    # Resize the image by removing seams (optimized).
-    seams = []
+def seam_carving(image, new_width, new_height):
+    # Resize the image by removing seams (both horizontal and vertical).
+    seams = []  
+    original_image = image.copy() 
+
+    # Resize horizontally
     for _ in range(image.shape[1] - new_width):
+        energy = calculate_energy(image)
+        seam = find_seam(energy)
+        seams.append(seam) 
+        image = remove_seam(image, seam)
+
+    # Resize vertically
+    image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE) 
+    for _ in range(image.shape[1] - new_height):
         energy = calculate_energy(image)
         seam = find_seam(energy)
         seams.append(seam)
         image = remove_seam(image, seam)
-    return image, seams
+    image = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE) 
+
+    return image, seams, original_image
 
 # Load the input image
 input_image = cv2.imread('input_image.jpg')
 
 # Resize the image using seam carving
 new_width = input_image.shape[1] // 2
-resized_image, seams = seam_carving(input_image, new_width)
+new_height = input_image.shape[0] // 2
+resized_image, seams, original_image = seam_carving(input_image, new_width, new_height)
 
 # Visualize the seams on the original image
-seam_visualization = visualize_seams(input_image.copy(), seams)
+seam_visualization = visualize_seams(original_image.copy(), seams)
 
 # Save the resized image and seam visualization
 cv2.imwrite('resized_image_bonus.jpg', resized_image)
-cv2.imwrite('seam_visualization.jpg', seam_visualization)
+cv2.imwrite('seam_visualization_bonus.jpg', seam_visualization)
 
 # Display the results using matplotlib
 plt.figure(figsize=(10, 5))
